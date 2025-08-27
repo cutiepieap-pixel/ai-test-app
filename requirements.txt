@@ -1,3 +1,15 @@
-streamlit
-boto3
-pillow
+# Web UI
+streamlit==1.36.0
+
+# AWS SDK
+boto3>=1.34.0
+botocore>=1.34.0
+
+# Image handling (for banner, etc.)
+pillow>=10.0.0
+
+# Network requests
+requests>=2.31.0
+
+# File watching (used internally by Streamlit)
+watchdog>=3.0.0
