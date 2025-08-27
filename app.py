@@ -1,120 +1,117 @@
 # app.py
 from pathlib import Path
+import traceback
 import streamlit as st
-import bedrock as glib  # Local library (bedrock.py)
 
-# ======================
-# Basic Settings
-# ======================
+# ===== Basic Settings =====
 st.set_page_config(page_title="PrepPro", page_icon="💬", layout="wide")
 APP_TITLE = "PrepPro: Your AI Amazon Interview Companion"
 
-# ======================
-# Banner Path (repo-relative)
-# ======================
-# 👉 App Runner 컨테이너에서도 동작하도록, 현재 파일 기준 상대경로로 배너를 읽습니다.
-BASE_DIR = Path(__file__).parent
-BANNER_PNG = BASE_DIR / "banner.png"   # 반드시 레포에 banner.png를 커밋하세요
+# ===== Safe import for bedrock helper (show warning if missing) =====
+glib = None
+bedrock_import_error = None
+try:
+    import bedrock as glib  # must exist as bedrock.py in repo root
+except Exception as e:
+    bedrock_import_error = f"{type(e).__name__}: {e}"
 
-# ======================
-# Disclaimer Text (English)
-# ======================
-DISCLAIMER_TEXT = """
-I'm an AI assistant unaffiliated with Amazon. 
-My responses are for practice only, not reflecting Amazon's actual interviews. 
-Amazon isn't responsible for interview outcomes based on my information. 
-Verify through official Amazon resources. 
-Use this exercise cautiously and do not solely rely on my responses for Amazon or other interviews. 
-Please do not share any personal or confidential data with the chatbot to ensure your data privacy.
-"""
+# ===== Paths (container-friendly) =====
+# In App Runner, your app code is under /app. We resolve banner relative to this file.
+HERE = Path(__file__).parent
+CANDIDATE_BANNERS = [
+    HERE / "banner.png",              # repo root
+    HERE / "assets" / "banner.png",   # optionally assets/banner.png
+]
 
-# ======================
-# Display Banner (scale down to 150px height, keep aspect ratio)
-# ======================
-# 모든 <img>에 영향을 주지 않도록 'max-height'을 사용 → 잘리지 않고 축소만 됨
-if BANNER_PNG.exists():
+def find_banner():
+    for p in CANDIDATE_BANNERS:
+        if p.exists():
+            return p
+    return None
+
+BANNER_PNG = find_banner()
+
+# ===== Disclaimer =====
+DISCLAIMER_TEXT = (
+    "I'm an AI assistant unaffiliated with Amazon. "
+    "My responses are for practice only, not reflecting Amazon's actual interviews. "
+    "Amazon isn't responsible for interview outcomes based on my information. "
+    "Verify through official Amazon resources. "
+    "Use this exercise cautiously and do not solely rely on my responses for Amazon or other interviews. "
+    "Please do not share any personal or confidential data with the chatbot to ensure your data privacy."
+)
+
+# ===== UI: Banner (keeps aspect ratio, caps height via wrapper only) =====
+st.markdown("<div id='banner-wrap'>", unsafe_allow_html=True)
+if BANNER_PNG:
     st.image(str(BANNER_PNG), use_container_width=True)
-    st.markdown(
-        """
-        <style>
-        /* 이미지가 너무 커 보이는 것을 방지 - 비율 유지, 높이만 제한 */
-        img {
-            max-height: 150px !important;
-            height: auto !important;
-            object-fit: contain !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
 else:
-    st.warning("Banner image not found in the app folder. Please add 'banner.png' to the repo root.")
+    st.warning("Banner image not found. Place `banner.png` at repo root (same folder as app.py) "
+               "or under `assets/banner.png`.")
+st.markdown("</div>", unsafe_allow_html=True)
 
-# ======================
-# Title & Disclaimer
-# ======================
+st.markdown(
+    """
+    <style>
+      /* Only affect the banner image inside our wrapper */
+      #banner-wrap img {
+        max-height: 150px !important;   /* cap height */
+        width: 100% !important;          /* fit width */
+        object-fit: contain !important;  /* keep aspect ratio without cropping */
+      }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# ===== Title & Disclaimer =====
 st.title(APP_TITLE)
+st.markdown(
+    f"""
+    <div style="
+        background:#fff3cd;
+        border:1px solid #ffe69c;
+        color:#664d03;
+        padding:12px 14px;
+        border-radius:8px;
+        margin:10px 0 6px 0;
+        font-size:14px;
+        line-height:1.5;">
+        <strong>Disclaimer:</strong><br>
+        {DISCLAIMER_TEXT}
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
-# 노란 박스에 전체 디스클레이머 텍스트 표기
-disclaimer_html = f"""
-<div style="
-    background:#fff3cd;
-    border:1px solid #ffe69c;
-    color:#664d03;
-    padding:12px 14px;
-    border-radius:8px;
-    margin:10px 0 6px 0;
-    font-size:14px;
-    line-height:1.5;">
-    <strong>Disclaimer:</strong><br>
-    {DISCLAIMER_TEXT.replace("\n", "<br>")}
-</div>
-"""
-st.markdown(disclaimer_html, unsafe_allow_html=True)
-
-# ======================
-# Tabs: Chat / Introduction / FAQ
-# ======================
-tab_chat, tab_intro, tab_faq = st.tabs(["💬 Chat", "📘 Introduction", "❓ FAQs"])
+# ===== Tabs =====
+tab_chat, tab_intro, tab_faq, tab_diag = st.tabs(["💬 Chat", "📘 Introduction", "❓ FAQs", "🛠 Diagnostics"])
 
 # --- Chat Tab ---
 with tab_chat:
     st.header("💬 Chat with PrepPro")
-
-    # 채팅 상태
-    if "chat_history" not in st.session_state:
+    if 'chat_history' not in st.session_state:
         st.session_state.chat_history = []
 
-    # 입력창 + 엔터로 전송
-    input_text = st.chat_input("Please type in any questions you may have.")
-
-    # 메시지 전송 시 KB 호출
-    if input_text:
-        with st.spinner("Thinking with Knowledge Base..."):
+    # If bedrock helper failed to import, show an inline error so page still renders
+    if bedrock_import_error:
+        st.error(
+            "Bedrock module import failed. Chat will be disabled.\n\n"
+            f"Details: {bedrock_import_error}"
+        )
+    else:
+        user_text = st.chat_input("Please type in any questions you may have.")
+        if user_text:
             try:
-                glib.chat_with_kb(message_history=st.session_state.chat_history, new_text=input_text)
+                glib.chat_with_kb(message_history=st.session_state.chat_history, new_text=user_text)
             except Exception as e:
-                # 런타임 오류를 UI에 보여줘서 디버깅이 쉬움
-                st.error(f"Chat error: {type(e).__name__}: {e}")
+                st.error(f"Chat backend error: {type(e).__name__}: {e}")
 
-    # 채팅 렌더
-    for message in st.session_state.chat_history:
-        with st.chat_message(message.role):
-            st.markdown(message.text)
+    for m in st.session_state.get('chat_history', []):
+        with st.chat_message(m.role):
+            st.markdown(m.text)
 
-    # 유틸 버튼
-    col1, col2, _ = st.columns([1,1,6])
-    with col1:
-        if st.button("🧹 Clear chat", use_container_width=True):
-            st.session_state.chat_history = []
-            st.rerun()
-    with col2:
-        if st.button("🐞 Debug KB/Identity", use_container_width=True):
-            # bedrock.debug_* 함수를 직접 출력 대신 UI에 안내
-            st.info("Check CloudWatch > Application logs for identity/KB diagnostics if enabled.\n"
-                    "Or run debug_print_identity_and_kbs() locally.")
-
-# --- Introduction Tab ---
+# --- Intro Tab ---
 with tab_intro:
     st.subheader("What is PrepPro?")
     st.markdown(
@@ -146,3 +143,21 @@ with tab_faq:
           → No, all conversations remain **only in the current session** and are not stored.  
         """
     )
+
+# --- Diagnostics Tab (to quickly verify in App Runner) ---
+with tab_diag:
+    st.write("### Environment")
+    st.code(
+        f"""
+CWD: {Path.cwd()}
+__file__: {__file__}
+HERE: {HERE}
+banner candidates:
+- {CANDIDATE_BANNERS[0]}
+- {CANDIDATE_BANNERS[1]}
+resolved banner: {BANNER_PNG if BANNER_PNG else 'NOT FOUND'}
+bedrock import error: {bedrock_import_error or 'None'}
+        """.strip()
+    )
+    st.caption("If banner shows NOT FOUND, ensure banner.png is committed to the repo root and redeploy.")
+
