@@ -1,169 +1,98 @@
-# app.py
-from pathlib import Path
+# app.py — minimal chat-first Streamlit app (no banner)
+
 import os
-import sys
+import traceback
+from pathlib import Path
 import streamlit as st
 
-# ============ Page basics ============
-st.set_page_config(page_title="PrepPro", page_icon="💬", layout="wide")
-APP_TITLE = "PrepPro: Your AI Amazon Interview Companion"
+st.set_page_config(page_title="PrepPro Chat", page_icon="💬", layout="wide")
 
-# ============ Robust import of backend ============
-HAVE_BACKEND = True
-IMPORT_ERROR = None
+APP_TITLE = "PrepPro: Knowledge Base Chat"
+APP_DESC = (
+    "Ask anything related to your Knowledge Base. "
+    "Responses are generated via AWS Bedrock Retrieve-and-Generate."
+)
+
+# ---- Safe import of bedrock helper (doesn't block page render)
+glib = None
+bedrock_import_error = None
 try:
-    import bedrock as glib  # your backend module
+    import bedrock as glib  # your bedrock.py helper (must live next to app.py)
 except Exception as e:
-    HAVE_BACKEND = False
-    IMPORT_ERROR = f"{type(e).__name__}: {e}"
+    bedrock_import_error = f"{type(e).__name__}: {e}"
 
-# ============ Banner finder ============
-def find_banner() -> Path | None:
-    # priority: env var -> ./banner.png -> ./static/banner.png
-    env_path = os.getenv("BANNER_PATH")
-    candidates = []
-    if env_path:
-        candidates.append(Path(env_path))
-    here = Path(__file__).resolve().parent
-    candidates += [here / "banner.png", here / "static" / "banner.png"]
-    for p in candidates:
-        if p.exists():
-            return p
-    return None
-
-BANNER_PNG = find_banner()
-
-# ============ Disclaimer ============
-DISCLAIMER_TEXT = (
-    "I'm an AI assistant unaffiliated with Amazon. "
-    "My responses are for practice only, not reflecting Amazon's actual interviews. "
-    "Amazon isn't responsible for interview outcomes based on my information. "
-    "Verify through official Amazon resources. "
-    "Use this exercise cautiously and do not solely rely on my responses for Amazon or other interviews. "
-    "Please do not share any personal or confidential data with the chatbot to ensure your data privacy."
-)
-
-# ============ UI: Banner ============
-if BANNER_PNG:
-    # 가로폭에 맞추고, 원본 비율 유지
-    st.image(str(BANNER_PNG), use_container_width=True)
-else:
-    st.info("Banner image not found (looked for `banner.png` or `static/banner.png`).")
-
-# ============ UI: Title & Disclaimer ============
+# ---- Page header (super minimal)
 st.title(APP_TITLE)
+st.caption(APP_DESC)
 
-st.markdown(
-    f"""
-    <div style="
-        background:#fff3cd;
-        border:1px solid #ffe69c;
-        color:#664d03;
-        padding:12px 14px;
-        border-radius:8px;
-        margin:10px 0 6px 0;
-        font-size:14px;
-        line-height:1.5;">
-        <strong>Disclaimer:</strong><br>
-        {DISCLAIMER_TEXT.replace("\n","<br>")}
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+# ---- Runtime env quick view (collapsed by default)
+with st.expander("Runtime info"):
+    st.write({
+        "AWS_REGION": os.getenv("AWS_REGION"),
+        "KB_ID": os.getenv("KB_ID"),
+        "MODEL_ID": os.getenv("MODEL_ID"),
+    })
+    if bedrock_import_error:
+        st.error("bedrock.py import failed")
+        st.code(bedrock_import_error)
 
-# ============ Tabs ============
-tab_chat, tab_intro, tab_faq = st.tabs(["💬 Chat", "📘 Introduction", "❓ FAQs"])
+# ---- Chat area
+st.subheader("💬 Chat")
 
-# --- Chat Tab ---
-with tab_chat:
-    st.header("💬 Chat with PrepPro")
+# session state for history
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-    if 'chat_history' not in st.session_state:
-        st.session_state.chat_history = []
+# render existing messages
+for msg in st.session_state.chat_history:
+    with st.chat_message(msg.role):
+        st.markdown(msg.text)
 
-    # 안내: 백엔드 임포트 실패 시 사용자에게 알려주되, UI는 유지
-    if not HAVE_BACKEND:
-        st.warning(
-            "Backend module (`bedrock.py`) import failed, so responses will not use the KB right now.\n\n"
-            f"Details: {IMPORT_ERROR}"
-        )
+# chat input (sticks to the bottom)
+user_text = st.chat_input("Type your question here…")
+if user_text:
+    # show user bubble immediately
+    st.session_state.chat_history.append(type("Msg", (), {"role": "user", "text": user_text}))
+    with st.chat_message("user"):
+        st.markdown(user_text)
 
-    input_text = st.chat_input("Please type in any questions you may have.")
-    if input_text:
-        # 사용자 메시지 먼저 쌓아주면 UI 즉시 갱신
-        st.session_state.chat_history.append(type("ChatMessage",(object,),{})())
-        st.session_state.chat_history[-1].role = "user"
-        st.session_state.chat_history[-1].text = input_text
-
-        if HAVE_BACKEND:
-            try:
-                # glib.chat_with_kb가 내부에서 history에 assistant 답변을 append 하는 구조라면
-                glib.chat_with_kb(message_history=st.session_state.chat_history, new_text=input_text)
-            except Exception as e:
-                err = f"Backend error: {type(e).__name__}: {e}"
-                st.session_state.chat_history.append(type("ChatMessage",(object,),{})())
-                st.session_state.chat_history[-1].role = "assistant"
-                st.session_state.chat_history[-1].text = err
+    # produce assistant reply
+    with st.chat_message("assistant"):
+        if glib is None:
+            # fallback echo when bedrock helper failed to import
+            reply = "(Bedrock unavailable) I received: " + user_text
+            st.markdown(reply)
+            st.session_state.chat_history.append(type("Msg", (), {"role": "assistant", "text": reply}))
         else:
-            # 임시 에코 답변
-            st.session_state.chat_history.append(type("ChatMessage",(object,),{})())
-            st.session_state.chat_history[-1].role = "assistant"
-            st.session_state.chat_history[-1].text = "⚠️ Backend unavailable. (Echo) You said: " + input_text
+            try:
+                reply = glib.chat_with_kb(
+                    message_history=st.session_state.chat_history,
+                    new_text=user_text
+                )
+                st.markdown(reply)
+            except Exception as e:
+                err = f"Error calling Knowledge Base: {type(e).__name__}: {e}"
+                st.error(err)
+                # keep a readable message in the history so UI stays coherent
+                st.session_state.chat_history.append(type("Msg", (), {"role": "assistant", "text": err}))
 
-    # 대화 렌더
-    for message in st.session_state.chat_history:
-        role = getattr(message, "role", "assistant")
-        text = getattr(message, "text", "")
-        with st.chat_message(role):
-            st.markdown(text)
-
-# --- Introduction Tab ---
-with tab_intro:
-    st.subheader("What is PrepPro?")
-    st.markdown(
-        "PrepPro is an **AI-powered interview companion** that helps you prepare for interviews effectively.  "
-        "You can practice answering real-world interview questions and receive **instant feedback** to improve your responses."
-    )
-
-    st.subheader("How to Use")
-    st.markdown(
-        "1. Type your question or let AI generate one for you in the **chat box**.  \n"
-        "2. Write your answer, and AI will provide **specific feedback** and improvement tips.  \n"
-        "3. **Repeat practice** to refine your answers and boost your confidence.  \n"
-        "4. Optionally, specify an industry or role to receive **tailored interview questions**."
-    )
-
-# --- FAQ Tab ---
-with tab_faq:
-    st.subheader("Frequently Asked Questions")
-    st.markdown(
-        "- **Q: Where do the questions come from?**  \n"
-        "  → They are based on AI models trained on public data and interview trends.  \n\n"
-        "- **Q: Are my answers saved?**  \n"
-        "  → No, all conversations remain **only in the current session** and are not stored."
-    )
-
-# ============ Debug Sidebar (helps on App Runner) ============
-with st.sidebar:
-    st.header("🔧 Debug Info")
-    st.write("**Python**:", sys.version)
-    st.write("**Streamlit**:", st.__version__)
-    cwd = Path.cwd()
-    st.write("**CWD**:", cwd)
+# ---- Tiny debug tab at the bottom (optional)
+with st.expander("Debug (files & last exception)"):
     try:
-        st.write("**Files in CWD**:", [p.name for p in cwd.iterdir()])
+        files = "\n".join(sorted(os.listdir(Path(__file__).parent)))
     except Exception as e:
-        st.write("List dir error:", f"{type(e).__name__}: {e}")
+        files = f"(listdir failed: {type(e).__name__}: {e})"
+    st.text_area("Files in app dir", value=files, height=160)
 
-    st.subheader("Env")
-    for key in ["AWS_REGION", "KB_ID", "MODEL_ID", "BANNER_PATH"]:
-        st.write(f"{key} =", os.getenv(key))
+# global exception capture to surface in Debug (best-effort)
+def _patch_report_exception():
+    import sys
+    def excepthook(exc_type, exc, tb):
+        st.session_state["_last_exception"] = "".join(traceback.format_exception(exc_type, exc, tb))
+        raise exc
+    sys.excepthook = excepthook
 
-    st.subheader("Banner")
-    st.write("Resolved path:", str(BANNER_PNG) if BANNER_PNG else "(not found)")
-    st.write("Exists?:", bool(BANNER_PNG and Path(BANNER_PNG).exists()))
-
-    st.subheader("Backend")
-    st.write("bedrock import ok?:", HAVE_BACKEND)
-    if IMPORT_ERROR:
-        st.code(IMPORT_ERROR)
+try:
+    _patch_report_exception()
+except Exception:
+    pass
