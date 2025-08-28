@@ -32,6 +32,8 @@ st.caption(APP_DESC)
 if bedrock_import_error:
     st.error("❌ Failed to import bedrock.py")
     st.code(bedrock_import_error)
+else:
+    st.success("✅ Bedrock module loaded successfully")
 
 # ---- Chat area
 st.subheader("💬 Chat")
