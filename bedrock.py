@@ -59,6 +59,10 @@ def chat_with_model(message_history, new_text=None):
 
 def chat_with_kb(message_history, new_text=None):
     import os
+    from dotenv import load_dotenv
+    
+    # Load environment variables from .env file for local development
+    load_dotenv()
     
     bedrock = boto3.client('bedrock-agent-runtime', region_name=os.getenv("AWS_REGION", "us-east-1"))
     kbId = os.getenv("KB_ID")  # Get from environment variable
