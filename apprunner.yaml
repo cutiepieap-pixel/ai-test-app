@@ -4,7 +4,7 @@ build:
   commands:
     build:
       - echo "Installing dependencies"
-      - pip install -r requirements.txt
+      - python3 -m pip install --upgrade pip setuptools wheel && python3 -m pip install --no-cache-dir -r requirements.txt --target=/app/.python_packages/lib/site-packages
 run:
   runtime-version: 3.11
   command: streamlit run app.py --server.port 8080 --server.address 0.0.0.0
