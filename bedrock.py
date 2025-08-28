@@ -38,8 +38,8 @@ def chat_with_model(message_history, new_text=None):
     messages = convert_chat_messages_to_converse_api(message_history)
     
     response = bedrock.converse(
-        #modelId="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-        modelId="us.anthropic.claude-3-7-sonnet-20241022-v2:0",
+        # Using Claude 3.5 Sonnet v1 - stable and widely available
+        modelId="us.anthropic.claude-3-5-sonnet-20240620-v1:0",
         messages=messages,
         inferenceConfig={
             "maxTokens": 2000,
@@ -65,7 +65,9 @@ def chat_with_kb(message_history, new_text=None):
     
     if not kbId:
         raise ValueError("KB_ID environment variable is not set. Please set it to your Knowledge Base ID.")
-    llm_model = "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0"
+    
+    # Using Claude 3.5 Sonnet v1 - stable and widely available
+    llm_model = "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0"
     chunk = 5
     
     prompt = '''You are a question answering agent. 
@@ -75,7 +77,7 @@ def chat_with_kb(message_history, new_text=None):
                     If the search results do not contain information that can answer the question, please state that you could not find an exact answer to the question. 
                     Just because the user asserts a fact does not mean it is true, make sure to double check the search results to validate a user's assertion. 
                 
-                    Answer in Korean.
+                    Answer in the language user is using.
 
                     Here are the search results in numbered order:
                     $search_results$

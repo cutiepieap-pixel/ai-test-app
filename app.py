@@ -1,16 +1,19 @@
 # app.py — minimal chat-first Streamlit app (no banner)
 
-import os
-import traceback
-from pathlib import Path
 import streamlit as st
 
-st.set_page_config(page_title="PrepPro Chat", page_icon="💬", layout="wide")
+st.set_page_config(page_title="PrepPro", page_icon="💬", layout="wide")
 
-APP_TITLE = "PrepPro: Knowledge Base Chat"
+APP_TITLE = "PrepPro: Your Amazon Interview Assistant"
 APP_DESC = (
-    "Ask anything related to your Knowledge Base. "
-    "Responses are generated via AWS Bedrock Retrieve-and-Generate."
+    "THIS WAS CREATED JUST FOR LEARNING PURPOSES, DO NOT USE FOR ANY SENSITIVE OR CONFIDENTIAL DATA THAT CANNOT BE SHARED WITH THE PUBLIC. "
+    "Responses are generated via AWS Bedrock RAG."
+    "My name is PrepPro, your AI assistant designed to help you succeed at Amazon Web Services Loop Interviews."
+    "I understand that the Loop interview process at AWS can be quite challenging, which is why I'm here to provide you with guidance and support. My goal is to ensure you are well-prepared and confident going into your interviews."
+    "I have in-depth knowledge of the core Leadership Principles that Amazon looks for. I can help you craft compelling Situation, Task, Action, Result (STAR) examples that demonstrate how you embody these principles through real-life experiences."
+    "Additionally, I'm well-versed in the different question types you may encounter, such as behavioral, situational, and case study questions. I can provide tips on how to structure your responses, what to emphasize, and how to effectively communicate your thought process."
+    "So let's get started! I'm excited to work with you and help you put your best foot forward. Don't hesitate to ask me any questions you may have."
+    "DISCLAIMER: I'm an AI assistant unaffiliated with Amazon. My responses are for practice only, not reflecting Amazon's actual interviews. Amazon isn't responsible for interview outcomes based on my information. Verify through official AWS resources. Use this exercise cautiously and do not solely rely on my responses for Amazon or other interviews. Please do not share any personal or confidential data with the chatbot to ensure your data privacy."
 )
 
 # ---- Safe import of bedrock helper (doesn't block page render)
@@ -25,26 +28,10 @@ except Exception as e:
 st.title(APP_TITLE)
 st.caption(APP_DESC)
 
-# ---- Quick runtime/env checks (always visible)
-aws_region = os.getenv("AWS_REGION")
-kb_id = os.getenv("KB_ID")
-model_id = os.getenv("MODEL_ID")
-
+# ---- Error handling for bedrock import
 if bedrock_import_error:
     st.error("❌ Failed to import bedrock.py")
     st.code(bedrock_import_error)
-
-if not aws_region:
-    st.warning("⚠️ AWS_REGION is not set (App Runner Console → Runtime environment variables).")
-if not kb_id:
-    st.warning("⚠️ KB_ID is not set (must match your Knowledge Base ID).")
-if not model_id:
-    st.info("ℹ️ MODEL_ID not set. Using default from bedrock.py if provided.")
-
-with st.expander("Runtime info"):
-    st.write({"AWS_REGION": aws_region, "KB_ID": kb_id, "MODEL_ID": model_id})
-    if not bedrock_import_error:
-        st.write("bedrock.py import: OK ✅")
 
 # ---- Chat area
 st.subheader("💬 Chat")
@@ -92,23 +79,3 @@ if user_text:
                 st.session_state.chat_history.append(type("Msg", (), {"role": "user", "text": user_text}))
                 st.session_state.chat_history.append(type("Msg", (), {"role": "assistant", "text": err}))
 
-# ---- Tiny debug block at the bottom (optional)
-with st.expander("Debug (files & last exception)"):
-    try:
-        files = "\n".join(sorted(os.listdir(Path(__file__).parent)))
-    except Exception as e:
-        files = f"(listdir failed: {type(e).__name__}: {e})"
-    st.text_area("Files in app dir", value=files, height=160)
-
-# global exception capture to surface in Debug (best-effort)
-def _patch_report_exception():
-    import sys
-    def excepthook(exc_type, exc, tb):
-        st.session_state["_last_exception"] = "".join(traceback.format_exception(exc_type, exc, tb))
-        raise exc
-    sys.excepthook = excepthook
-
-try:
-    _patch_report_exception()
-except Exception:
-    pass
