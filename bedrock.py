@@ -59,16 +59,22 @@ def chat_with_model(message_history, new_text=None):
 
 def chat_with_kb(message_history, new_text=None):
     import os
-    from dotenv import load_dotenv
     
-    # Load environment variables from .env file for local development
-    load_dotenv()
+    # Load environment variables from .env file for local development (optional)
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        # dotenv not available, use system environment variables
+        pass
     
-    bedrock = boto3.client('bedrock-agent-runtime', region_name=os.getenv("AWS_REGION", "us-east-1"))
-    kbId = os.getenv("KB_ID")  # Get from environment variable
+    aws_region = os.getenv("AWS_REGION", "us-east-1")
+    kbId = os.getenv("KB_ID")
     
     if not kbId:
-        raise ValueError("KB_ID environment variable is not set. Please set it to your Knowledge Base ID.")
+        raise ValueError(f"KB_ID environment variable is not set. Available env vars: {list(os.environ.keys())}")
+    
+    bedrock = boto3.client('bedrock-agent-runtime', region_name=aws_region)
     
     # Using Claude 3.5 Sonnet v1 - stable and widely available
     llm_model = "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0"
